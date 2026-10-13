@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import XCTest
 @testable import RazerKit
 
@@ -54,12 +56,13 @@ final class RazerReportTests: XCTestCase {
         let model = DeviceCatalog.model(productID: 0x006E)!
         XCTAssertNoThrow(try model.validate(dpi: 800))
         XCTAssertNoThrow(try model.validate(dpi: 6400))
-        XCTAssertThrowsError(try model.validate(dpi: 100))
-        XCTAssertThrowsError(try model.validate(dpi: 6500))
-        XCTAssertThrowsError(try model.validate(dpi: 850))
+        XCTAssertThrowsError(try model.validate(dpi: 150))
+        XCTAssertNoThrow(try model.validate(dpi: 200))
+        XCTAssertThrowsError(try model.validate(dpi: 6450))
+        XCTAssertThrowsError(try model.validate(dpi: 825))
     }
 
     func testUnknownProductIsNotSupported() {
-        XCTAssertNil(DeviceCatalog.model(productID: 0x0084))
+        XCTAssertNil(DeviceCatalog.model(productID: 0xFFFF))
     }
 }

@@ -1,175 +1,119 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import Foundation
 import IOKit
-import IOKit.hid
-import CRazerUSB
 
 public enum RazerError: Error, CustomStringConvertible {
     case noDevice
-    case notPermitted
-    case openFailed(IOReturn)
+    case unsupported(String)
     case ioFailed(String, IOReturn)
     case noResponse
+    case notResponding
     case deviceStatus(UInt8)
     case invalidDPI(String)
-    case unconfirmedModel(String)
     case readbackMismatch(expected: DPIValue, got: DPIValue)
 
     public var description: String {
         switch self {
         case .noDevice:
             return "No supported Razer mouse is connected."
-        case .notPermitted:
-            return "macOS blocked access to the mouse. Allow this app under System Settings → Privacy & Security → Input Monitoring, then try again."
-        case .openFailed(let r):
-            return "Could not open the mouse (IOReturn 0x\(String(UInt32(bitPattern: r), radix: 16)))."
+        case .unsupported(let why):
+            return why
         case .ioFailed(let what, let r):
             return "\(what) failed (IOReturn 0x\(String(UInt32(bitPattern: r), radix: 16)))."
         case .noResponse:
             return "The mouse did not answer."
+        case .notResponding:
+            return "The mouse isn't responding. If it's wireless, check that it's switched on and awake."
         case .deviceStatus(let s):
             let name = RazerReport.Status(rawValue: s).map { "\($0)" } ?? "unknown"
             return "The mouse rejected the command (status 0x\(String(s, radix: 16)): \(name))."
         case .invalidDPI(let why):
             return "Invalid DPI: \(why)."
-        case .unconfirmedModel(let name):
-            return "\(name) has not been verified for writing yet; refusing to change its settings."
         case .readbackMismatch(let expected, let got):
             return "The mouse reports \(got) DPI after setting \(expected)."
         }
     }
 }
 
-/// One connected Razer mouse, addressed through its HID mouse interface
-/// (the only interface whose descriptor declares the 90-byte feature report).
+/// A connected mouse whose model is in the catalog.
 public final class RazerMouse {
+    public let device: DetectedDevice
     public let model: RazerModel
-    public let locationID: Int
-    public let firmware: String
-    let device: IOHIDDevice
-    private let lock = NSLock()
 
-    init(device: IOHIDDevice, model: RazerModel) {
+    public init?(_ device: DetectedDevice) {
+        guard let model = device.model else { return nil }
         self.device = device
         self.model = model
-        self.locationID = Self.intProperty(device, kIOHIDLocationIDKey) ?? 0
-        let version = Self.intProperty(device, kIOHIDVersionNumberKey) ?? 0
-        self.firmware = "\(version >> 8).\(String(format: "%02x", version & 0xFF))"
     }
 
-    // MARK: Discovery
-
-    /// Matching dictionary for the HID interfaces we talk to.
-    static var matching: [String: Any] {
-        [
-            kIOHIDVendorIDKey: DeviceCatalog.razerVendorID,
-            kIOHIDPrimaryUsagePageKey: kHIDPage_GenericDesktop,
-            kIOHIDPrimaryUsageKey: kHIDUsage_GD_Mouse,
-        ]
-    }
-
-    /// Wraps `device` if it is a supported model's control interface.
-    static func make(_ device: IOHIDDevice) -> RazerMouse? {
-        guard let pid = intProperty(device, kIOHIDProductIDKey),
-              let model = DeviceCatalog.model(productID: pid),
-              (intProperty(device, kIOHIDMaxFeatureReportSizeKey) ?? 0) >= RazerReport.size
-        else { return nil }
-        return RazerMouse(device: device, model: model)
-    }
-
-    /// Currently connected supported mice.
+    /// Currently connected supported mice, ordered by port.
     public static func connected() -> [RazerMouse] {
-        let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
-        guard let set = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return [] }
-        return set.compactMap(make).sorted { $0.locationID < $1.locationID }
+        DeviceScanner.scan().compactMap(RazerMouse.init)
     }
 
-    static func intProperty(_ device: IOHIDDevice, _ key: String) -> Int? {
-        IOHIDDeviceGetProperty(device, key as CFString) as? Int
+    /// The DPI the mouse is using now.
+    public func currentDPI() throws -> DPIValue {
+        try read(model.readStorage)
     }
 
-    // MARK: Transport
-
-    /// USB interface (wIndex) that carries the Razer control report on mice.
-    static let controlInterface: UInt16 = 0
-
-    /// Sends one command and returns the device's matching, successful answer.
-    ///
-    /// The report goes out as a HID class control request on the device's
-    /// control pipe (see CRazerUSB). The HID interfaces are never opened, so no
-    /// Input Monitoring permission is needed and the cursor is never interrupted.
-    func send(_ command: RazerCommand, transactionID: UInt8) throws -> RazerReport {
-        lock.lock()
-        defer { lock.unlock() }
-
-        let location = UInt32(truncatingIfNeeded: locationID)
-        let request = command.report(transactionID: transactionID).encoded()
-        let setResult = request.withUnsafeBufferPointer {
-            razer_usb_set_feature(location, Self.controlInterface, $0.baseAddress!, UInt16($0.count))
-        }
-        if setResult == kIOReturnNoDevice { throw RazerError.noDevice }
-        guard setResult == kIOReturnSuccess else { throw RazerError.ioFailed("Sending to the mouse", setResult) }
-
-        // The firmware needs a moment to process; it answers "busy" until done.
-        for attempt in 0..<12 {
-            usleep(attempt == 0 ? 2_000 : 8_000)
-            var buffer = [UInt8](repeating: 0, count: RazerReport.size)
-            var length = UInt16(buffer.count)
-            let getResult = buffer.withUnsafeMutableBufferPointer {
-                razer_usb_get_feature(location, Self.controlInterface, $0.baseAddress!, &length)
-            }
-            guard getResult == kIOReturnSuccess else { throw RazerError.ioFailed("Reading from the mouse", getResult) }
-            guard length == RazerReport.size, let response = RazerReport(bytes: buffer) else { continue }
-
-            switch response.parsedStatus {
-            case .busy, .new:
-                continue
-            case .success where command.matches(response, transactionID: transactionID):
-                return response
-            case .success:
-                continue // a stale answer to something else
-            default:
-                throw RazerError.deviceStatus(response.status)
-            }
-        }
-        throw RazerError.noResponse
+    /// The DPI saved in the mouse, i.e. what other computers see. Only
+    /// meaningful for models that take temporary writes; nil if unreadable.
+    public func savedDPI() -> DPIValue? {
+        guard model.writeStorage == .temporary else { return nil }
+        return try? read(.saved)
     }
 
-    // MARK: DPI
-
-    /// Read-only. Tries each known transaction id and reports what the mouse
-    /// answered, so the right one can be confirmed before anything is written.
-    public func probe() -> [(transactionID: UInt8, result: Result<DPIValue, Error>)] {
-        DeviceCatalog.candidateTransactionIDs.map { id in
-            (id, Result { try readDPI(.temporary, transactionID: id) })
-        }
-    }
-
-    public func getDPI(_ storage: DPIStorage = .temporary) throws -> DPIValue {
-        if let id = model.transactionID { return try readDPI(storage, transactionID: id) }
-        // Unconfirmed model: reads are harmless, so find an id that answers.
-        var lastError: Error = RazerError.noResponse
-        for id in DeviceCatalog.candidateTransactionIDs {
-            do { return try readDPI(storage, transactionID: id) } catch { lastError = error }
-        }
-        throw lastError
-    }
-
-    /// Sets the DPI and reads it back to confirm the mouse applied it.
+    /// Sets the DPI using the model's storage and reads it back to confirm it.
     @discardableResult
-    public func setDPI(_ dpi: Int, storage: DPIStorage = .temporary) throws -> DPIValue {
-        guard let id = model.transactionID else { throw RazerError.unconfirmedModel(model.name) }
+    public func setDPI(_ dpi: Int) throws -> DPIValue {
         try model.validate(dpi: dpi)
+        let before = try? currentDPI()
         let value = DPIValue(x: UInt16(dpi), y: UInt16(dpi))
-        _ = try send(.setDPI(storage, x: value.x, y: value.y), transactionID: id)
-        let readBack = try readDPI(storage, transactionID: id)
-        guard readBack == value else { throw RazerError.readbackMismatch(expected: value, got: readBack) }
+        _ = try send(.setDPI(model.writeStorage, x: value.x, y: value.y))
+        let readBack = try currentDPI()
+        guard readBack == value else {
+            // The firmware picked something else; put back what it had before.
+            if let before { _ = try? send(.setDPI(model.writeStorage, x: before.x, y: before.y)) }
+            throw RazerError.readbackMismatch(expected: value, got: readBack)
+        }
         return readBack
     }
 
-    private func readDPI(_ storage: DPIStorage, transactionID: UInt8) throws -> DPIValue {
-        let response = try send(.getDPI(storage), transactionID: transactionID)
-        guard let value = DPIValue(response: response) else { throw RazerError.noResponse }
+    private func read(_ storage: DPIStorage) throws -> DPIValue {
+        guard let value = DPIValue(response: try send(.getDPI(storage))) else { throw RazerError.noResponse }
         return value
+    }
+
+    private func send(_ command: RazerCommand) throws -> RazerReport {
+        try Transport.send(command, location: device.locationID, interface: model.interface,
+                           transactionID: model.transactionID, responseDelay: model.responseDelay)
+    }
+}
+
+public struct ProbeResult {
+    public let transactionID: UInt8
+    public let interface: UInt16
+    public let result: Result<DPIValue, Error>
+}
+
+public enum Probe {
+    /// Read-only: asks the device for its DPI with each known protocol variant.
+    /// Used to report unknown models; never writes anything.
+    public static func run(_ device: DetectedDevice) -> [ProbeResult] {
+        var results: [ProbeResult] = []
+        for interface in DeviceCatalog.candidateInterfaces {
+            for id in DeviceCatalog.candidateTransactionIDs {
+                let result = Result {
+                    let response = try Transport.send(.getDPI(.temporary), location: device.locationID,
+                                                      interface: interface, transactionID: id,
+                                                      responseDelay: 60_000)
+                    guard let value = DPIValue(response: response) else { throw RazerError.noResponse }
+                    return value
+                }
+                results.append(ProbeResult(transactionID: id, interface: interface, result: result))
+            }
+        }
+        return results
     }
 }

@@ -1,0 +1,68 @@
+name: Report your mouse
+description: Tell us whether DPI Switcher works with your Razer mouse (this is how models become "verified").
+title: "Mouse report: "
+labels: [mouse-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! The app's **Report…** menu item fills in most fields and copies a diagnostic
+        report to your clipboard. From the terminal: `dpiswitcher report`.
+  - type: input
+    id: model
+    attributes:
+      label: Mouse model
+      placeholder: Razer DeathAdder Essential
+    validations:
+      required: true
+  - type: input
+    id: usb-id
+    attributes:
+      label: USB ID
+      description: Shown by `dpiswitcher list`, e.g. 1532:006E
+      placeholder: "1532:006E"
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware
+      placeholder: "2.00"
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac type
+      placeholder: 14.5 (arm64)
+    validations:
+      required: true
+  - type: dropdown
+    id: connection
+    attributes:
+      label: Connection
+      options:
+        - Wired
+        - Wireless (USB receiver)
+        - Wireless mouse with charging cable plugged in
+    validations:
+      required: true
+  - type: checkboxes
+    id: results
+    attributes:
+      label: What did you check?
+      options:
+        - label: The current DPI shown by the app matches what the mouse is set to
+        - label: Choosing a preset changes the pointer speed
+        - label: After unplugging and replugging (wired mice), the mouse is back at its saved DPI
+        - label: The app re-applies the Mac DPI when the mouse is plugged in again
+  - type: textarea
+    id: details
+    attributes:
+      label: Diagnostic report
+      description: Paste the output of `dpiswitcher report` (the app copies it to your clipboard).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else?

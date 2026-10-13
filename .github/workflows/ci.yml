@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: swift test
+      - name: Check the model database is up to date with its generator
+        run: |
+          git clone --quiet https://github.com/openrazer/openrazer.git /tmp/openrazer
+          COMMIT="$(sed -n 's/.*openRazerCommit = "\(.*\)"/\1/p' Sources/RazerKit/Generated/ModelDatabase.swift)"
+          git -C /tmp/openrazer checkout --quiet "$COMMIT"
+          python3 -I scripts/generate-models.py /tmp/openrazer "$COMMIT" "$(git -C /tmp/openrazer log -1 --format=%cs)"
+          git diff --exit-code -- Sources/RazerKit/Generated docs/SUPPORTED_MICE.md
+      - name: Build universal app
+        run: scripts/build-app.sh --universal --zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DPI-Switcher
+          path: build/DPI-Switcher-*.zip

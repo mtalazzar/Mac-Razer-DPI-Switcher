@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "RazerDPI",
+    name: "DPISwitcher",
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "RazerKit", targets: ["RazerKit"]),
-        .executable(name: "razerdpi", targets: ["razerdpi"]),
-        .executable(name: "RazerDPIApp", targets: ["RazerDPIApp"]),
+        .executable(name: "dpiswitcher", targets: ["dpiswitcher"]),
+        .executable(name: "DPISwitcherApp", targets: ["DPISwitcherApp"]),
     ],
     targets: [
         .target(
@@ -19,8 +19,8 @@ let package = Package(
             dependencies: ["CRazerUSB"],
             linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]
         ),
-        .executableTarget(name: "razerdpi", dependencies: ["RazerKit"]),
-        .executableTarget(name: "RazerDPIApp", dependencies: ["RazerKit"]),
+        .executableTarget(name: "dpiswitcher", dependencies: ["RazerKit"]),
+        .executableTarget(name: "DPISwitcherApp", dependencies: ["RazerKit"]),
         .testTarget(name: "RazerKitTests", dependencies: ["RazerKit"]),
     ]
 )

@@ -1,0 +1,9 @@
+[
+  {
+    "pid": "0x006E",
+    "firmware": "2.00",
+    "macos": "13.7.8 (Intel)",
+    "date": "2026-10-13",
+    "notes": "get/set temporary DPI confirmed; resets to saved DPI on replug; 200-6400 in steps of 50 accepted, 100/150 rejected (jumps to 1800)"
+  }
+]

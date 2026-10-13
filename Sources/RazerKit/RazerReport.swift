@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import Foundation
 
 /// The 90-byte Razer feature report, laid out as documented by OpenRazer

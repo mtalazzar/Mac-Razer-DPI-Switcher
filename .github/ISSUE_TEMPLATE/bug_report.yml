@@ -1,0 +1,24 @@
+name: Bug report
+description: Something doesn't work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Diagnostic report
+      description: Output of `dpiswitcher report`.
+      render: text
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac type
+      placeholder: 14.5 (arm64)
+    validations:
+      required: true

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Feature reports sent as raw HID class control requests on the default
 // control pipe — the same transfer OpenRazer issues on Linux
 // (usb_control_msg with HID_REQ_SET_REPORT / HID_REQ_GET_REPORT).
