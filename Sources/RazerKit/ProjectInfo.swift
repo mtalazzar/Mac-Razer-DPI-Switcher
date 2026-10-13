@@ -5,8 +5,7 @@ import Foundation
 public enum ProjectInfo {
     public static let name = "DPI Switcher"
     public static let version = "1.0.0"
-    /// Set this to the GitHub repository before publishing.
-    public static let repository = "https://github.com/OWNER/dpi-switcher"
+    public static let repository = "https://github.com/mtalazzar/Mac-Razer-DPI-Switcher"
 
     /// Pre-filled "Report your mouse" issue (fields match .github/ISSUE_TEMPLATE/mouse-report.yml).
     public static func reportURL(for device: DetectedDevice, result: String) -> URL? {

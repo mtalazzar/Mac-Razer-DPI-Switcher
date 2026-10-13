@@ -57,3 +57,16 @@ final class CatalogTests: XCTestCase {
         XCTAssertFalse(saved.keepsOtherComputersDPI)
     }
 }
+
+final class ProjectInfoTests: XCTestCase {
+    func testReportURLPointsAtTheRepository() throws {
+        let device = DetectedDevice(productID: 0x006E, locationID: 1, usbName: "Razer DeathAdder Essential",
+                                    firmware: "2.00", looksLikeMouse: true)
+        let url = try XCTUnwrap(ProjectInfo.reportURL(for: device, result: "Current DPI: 800"))
+        XCTAssertEqual(url.host, "github.com")
+        XCTAssertEqual(url.path, "/mtalazzar/Mac-Razer-DPI-Switcher/issues/new")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first { $0.name == "template" }?.value, "mouse-report.yml")
+        XCTAssertEqual(items.first { $0.name == "usb-id" }?.value, "1532:006E")
+    }
+}

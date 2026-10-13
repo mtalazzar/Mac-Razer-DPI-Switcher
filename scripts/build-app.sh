@@ -8,13 +8,13 @@
 #   --install    copy the app to /Applications and link the CLI into /usr/local/bin
 #
 # Environment:
-#   BUNDLE_ID      bundle identifier (default io.github.dpi-switcher)
+#   BUNDLE_ID      bundle identifier (default io.github.mtalazzar.DPISwitcher)
 #   SIGN_IDENTITY  codesign identity (default "-" = ad-hoc). Set to a
 #                  "Developer ID Application: …" identity to sign for distribution.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-BUNDLE_ID="${BUNDLE_ID:-io.github.dpi-switcher}"
+BUNDLE_ID="${BUNDLE_ID:-io.github.mtalazzar.DPISwitcher}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 VERSION="$(sed -n 's/.*static let version = "\(.*\)".*/\1/p' Sources/RazerKit/ProjectInfo.swift)"
 APP="build/DPI Switcher.app"

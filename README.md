@@ -117,6 +117,8 @@ keeps working while the DPI changes.
 ## Build from source
 
 ```bash
+git clone https://github.com/mtalazzar/Mac-Razer-DPI-Switcher.git
+cd Mac-Razer-DPI-Switcher
 swift test
 scripts/build-app.sh --install    # builds and installs to /Applications
 ```
